@@ -1,4 +1,3 @@
-
 -- sirius sense esp library 
 -- services
 local runService = game:GetService("RunService");
