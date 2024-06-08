@@ -574,7 +574,7 @@ local EspInterface = {
 	},
 	teamSettings = {    
 		enemy = {
-			enabled = true,
+			enabled = false,
 			box = true,
 			boxColor = { Color3.new(1,0,0), 1 },
 			boxOutline = true,
