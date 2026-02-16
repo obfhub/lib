@@ -1,0 +1,1661 @@
+--[[
+    ObfHub UI Library v1.0
+    Components: Window, Tab, Section, Toggle, Checkbox, Slider, Dropdown, Keybind, ColorPicker, Input, Button, Label, ThemeManager
+    
+    Usage:
+        local UI = loadstring(game:HttpGet("..."))()
+        local win = UI.Window({ Title = "My Script", Theme = "Default" })
+        local tab = win:Tab("Main")
+        local sec = tab:Section("Combat")
+        sec:Toggle({ Name = "Aimbot", Default = false, Callback = function(v) end })
+        sec:Slider({ Name = "FOV", Min = 0, Max = 360, Default = 90, Callback = function(v) end })
+]]
+
+local ObfUI = {}
+ObfUI.__index = ObfUI
+
+-- ============================================================
+--  SERVICES
+-- ============================================================
+local TweenService   = game:GetService("TweenService")
+local RunService     = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui        = game:GetService("CoreGui")
+local TextService    = game:GetService("TextService")
+
+-- ============================================================
+--  THEMES
+-- ============================================================
+ObfUI.Themes = {
+    Default = {
+        Accent      = Color3.fromRGB(255, 0, 242),
+        Cyan        = Color3.fromRGB(6, 182, 212),
+        Purple      = Color3.fromRGB(124, 58, 237),
+        Green       = Color3.fromRGB(0, 230, 120),
+        Red         = Color3.fromRGB(255, 80, 80),
+        Yellow      = Color3.fromRGB(255, 200, 50),
+        Background  = Color3.fromRGB(6, 6, 10),
+        Surface     = Color3.fromRGB(10, 10, 15),
+        Card        = Color3.fromRGB(18, 18, 26),
+        Input       = Color3.fromRGB(20, 20, 28),
+        Text        = Color3.fromRGB(230, 230, 240),
+        TextDim     = Color3.fromRGB(140, 140, 160),
+        TextMuted   = Color3.fromRGB(80, 80, 100),
+        Border      = Color3.fromRGB(50, 50, 70),
+        BorderLight = Color3.fromRGB(255, 0, 242),
+    },
+    Midnight = {
+        Accent      = Color3.fromRGB(99, 102, 241),
+        Cyan        = Color3.fromRGB(34, 211, 238),
+        Purple      = Color3.fromRGB(168, 85, 247),
+        Green       = Color3.fromRGB(52, 211, 153),
+        Red         = Color3.fromRGB(248, 113, 113),
+        Yellow      = Color3.fromRGB(251, 191, 36),
+        Background  = Color3.fromRGB(2, 6, 23),
+        Surface     = Color3.fromRGB(5, 8, 30),
+        Card        = Color3.fromRGB(10, 14, 42),
+        Input       = Color3.fromRGB(14, 18, 50),
+        Text        = Color3.fromRGB(226, 232, 240),
+        TextDim     = Color3.fromRGB(148, 163, 184),
+        TextMuted   = Color3.fromRGB(71, 85, 105),
+        Border      = Color3.fromRGB(30, 41, 59),
+        BorderLight = Color3.fromRGB(99, 102, 241),
+    },
+    Crimson = {
+        Accent      = Color3.fromRGB(239, 68, 68),
+        Cyan        = Color3.fromRGB(251, 146, 60),
+        Purple      = Color3.fromRGB(220, 38, 38),
+        Green       = Color3.fromRGB(34, 197, 94),
+        Red         = Color3.fromRGB(255, 80, 80),
+        Yellow      = Color3.fromRGB(250, 204, 21),
+        Background  = Color3.fromRGB(10, 5, 5),
+        Surface     = Color3.fromRGB(15, 8, 8),
+        Card        = Color3.fromRGB(24, 12, 12),
+        Input       = Color3.fromRGB(28, 14, 14),
+        Text        = Color3.fromRGB(254, 226, 226),
+        TextDim     = Color3.fromRGB(252, 165, 165),
+        TextMuted   = Color3.fromRGB(127, 29, 29),
+        Border      = Color3.fromRGB(69, 20, 20),
+        BorderLight = Color3.fromRGB(239, 68, 68),
+    },
+    Forest = {
+        Accent      = Color3.fromRGB(34, 197, 94),
+        Cyan        = Color3.fromRGB(20, 184, 166),
+        Purple      = Color3.fromRGB(16, 185, 129),
+        Green       = Color3.fromRGB(74, 222, 128),
+        Red         = Color3.fromRGB(239, 68, 68),
+        Yellow      = Color3.fromRGB(250, 204, 21),
+        Background  = Color3.fromRGB(2, 10, 6),
+        Surface     = Color3.fromRGB(5, 14, 8),
+        Card        = Color3.fromRGB(8, 22, 12),
+        Input       = Color3.fromRGB(10, 26, 14),
+        Text        = Color3.fromRGB(220, 252, 231),
+        TextDim     = Color3.fromRGB(134, 239, 172),
+        TextMuted   = Color3.fromRGB(21, 128, 61),
+        Border      = Color3.fromRGB(20, 83, 45),
+        BorderLight = Color3.fromRGB(34, 197, 94),
+    },
+}
+
+ObfUI._currentTheme = ObfUI.Themes.Default
+ObfUI._themeCallbacks = {}
+
+-- ============================================================
+--  INTERNAL HELPERS
+-- ============================================================
+local function tween(inst, props, t, style, dir)
+    local info = TweenInfo.new(t or 0.15, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out)
+    TweenService:Create(inst, info, props):Play()
+end
+
+local function newInst(class, props, parent)
+    local i = Instance.new(class)
+    for k, v in pairs(props or {}) do i[k] = v end
+    if parent then i.Parent = parent end
+    return i
+end
+
+local function corner(parent, r)
+    return newInst("UICorner", { CornerRadius = UDim.new(0, r or 6) }, parent)
+end
+
+local function stroke(parent, color, thickness, transparency)
+    return newInst("UIStroke", {
+        Color = color or Color3.fromRGB(255,255,255),
+        Thickness = thickness or 1,
+        Transparency = transparency or 0.5,
+    }, parent)
+end
+
+local function gradient(parent, c0, c1, rot)
+    return newInst("UIGradient", {
+        Color = ColorSequence.new(c0, c1),
+        Rotation = rot or 0,
+    }, parent)
+end
+
+local function gradientMulti(parent, keypoints, rot)
+    return newInst("UIGradient", {
+        Color = ColorSequence.new(keypoints),
+        Rotation = rot or 0,
+    }, parent)
+end
+
+local function padding(parent, t, b, l, r)
+    return newInst("UIPadding", {
+        PaddingTop    = UDim.new(0, t or 0),
+        PaddingBottom = UDim.new(0, b or 0),
+        PaddingLeft   = UDim.new(0, l or 0),
+        PaddingRight  = UDim.new(0, r or 0),
+    }, parent)
+end
+
+local function listLayout(parent, dir, pad, halign, valign)
+    return newInst("UIListLayout", {
+        FillDirection       = dir or Enum.FillDirection.Vertical,
+        Padding             = UDim.new(0, pad or 4),
+        HorizontalAlignment = halign or Enum.HorizontalAlignment.Left,
+        SortOrder           = Enum.SortOrder.LayoutOrder,
+    }, parent)
+end
+
+local function autoSize(frame)
+    local layout = frame:FindFirstChildOfClass("UIListLayout")
+    if not layout then return end
+    local function update()
+        frame.Size = UDim2.new(1, 0, 0, layout.AbsoluteContentSize.Y)
+    end
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(update)
+    update()
+end
+
+local FONT = Enum.Font.Code
+
+local function label(parent, text, size, color, xAlign, yAlign)
+    return newInst("TextLabel", {
+        Parent               = parent,
+        BackgroundTransparency = 1,
+        Text                 = text or "",
+        Font                 = FONT,
+        TextSize             = size or 12,
+        TextColor3           = color or Color3.fromRGB(230, 230, 240),
+        TextXAlignment       = xAlign or Enum.TextXAlignment.Left,
+        TextYAlignment       = yAlign or Enum.TextYAlignment.Center,
+        Size                 = UDim2.new(1, 0, 0, size and size + 4 or 16),
+        TextTruncate         = Enum.TextTruncate.AtEnd,
+    })
+end
+
+-- Dragging helper
+local function makeDraggable(handle, root)
+    local dragging, dragStart, startPos = false, nil, nil
+    handle.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging  = true
+            dragStart = i.Position
+            startPos  = root.Position
+        end
+    end)
+    handle.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = i.Position - dragStart
+            root.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + delta.X,
+                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+end
+
+-- Particles helper
+local function spawnParticles(parent, W, H)
+    local T = ObfUI._currentTheme
+    local particles = {}
+    local alive = true
+    for _ = 1, 160 do
+        local p = newInst("Frame", { BorderSizePixel = 0 }, parent)
+        local r = math.random()
+        p.BackgroundColor3    = r < 0.12 and T.Accent or (r < 0.20 and T.Cyan or Color3.fromRGB(220,220,220))
+        p.BackgroundTransparency = r < 0.12 and 0.3 or 0.6
+        local sz = math.random() < 0.85 and 1 or 2
+        p.Size     = UDim2.fromOffset(sz, sz)
+        p.Position = UDim2.new(0, math.random(0, W), 0, math.random(0, H))
+        corner(p, 99)
+        particles[#particles+1] = {
+            inst  = p,
+            x     = p.Position.X.Offset,
+            y     = p.Position.Y.Offset,
+            speed = 15 + math.random() * 45,
+            drift = -6  + math.random() * 12,
+        }
+    end
+    local conn
+    conn = RunService.RenderStepped:Connect(function(dt)
+        if not alive then return end
+        for _, pr in ipairs(particles) do
+            pr.y += pr.speed * dt
+            pr.x += pr.drift * dt
+            if pr.y > H + 5 then pr.y = -5;  pr.x = math.random(0, W) end
+            if pr.x < -5    then pr.x = W + 5 end
+            if pr.x > W + 5 then pr.x = -5   end
+            pr.inst.Position = UDim2.new(0, pr.x, 0, pr.y)
+        end
+    end)
+    return function()
+        alive = false
+        if conn then conn:Disconnect() end
+    end
+end
+
+-- ============================================================
+--  THEME MANAGER
+-- ============================================================
+function ObfUI.ThemeManager(window)
+    -- Returns a section that lets users pick & customise themes
+    local T = ObfUI._currentTheme
+
+    local frame = newInst("Frame", {
+        Size = UDim2.new(1, 0, 0, 0),
+        BackgroundTransparency = 1,
+        ClipsDescendants = false,
+    })
+    listLayout(frame, nil, 6)
+    autoSize(frame)
+
+    -- Header
+    local hdr = newInst("Frame", {
+        Size = UDim2.new(1, 0, 0, 28),
+        BackgroundColor3 = T.Card,
+        Parent = frame,
+    })
+    corner(hdr)
+    padding(hdr, 0, 0, 10, 10)
+    local hdrLbl = label(hdr, "🎨  Theme Manager", 11, T.Accent)
+    hdrLbl.Size = UDim2.new(1, 0, 1, 0)
+
+    -- Theme buttons
+    local btnRow = newInst("Frame", {
+        Size = UDim2.new(1, 0, 0, 30),
+        BackgroundTransparency = 1,
+        Parent = frame,
+    })
+    local btnList = newInst("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        Padding = UDim.new(0, 6),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Parent = btnRow,
+    })
+
+    local themeNames = { "Default", "Midnight", "Crimson", "Forest" }
+    for _, name in ipairs(themeNames) do
+        local th = ObfUI.Themes[name]
+        local btn = newInst("TextButton", {
+            Size = UDim2.new(0, 0, 1, 0),
+            AutomaticSize = Enum.AutomaticSize.X,
+            BackgroundColor3 = th.Card,
+            Text = "",
+            AutoButtonColor = false,
+            Parent = btnRow,
+        })
+        corner(btn, 5)
+        padding(btn, 0, 0, 10, 10)
+        local s = stroke(btn, th.Accent, 1, 0.6)
+        local lbl = label(btn, name, 10, th.Text)
+        lbl.Size = UDim2.new(0, 60, 1, 0)
+
+        -- Colour swatch
+        local sw = newInst("Frame", {
+            Size = UDim2.new(0, 8, 0, 8),
+            BackgroundColor3 = th.Accent,
+            Position = UDim2.new(1, -18, 0.5, -4),
+            Parent = btn,
+        })
+        corner(sw, 99)
+
+        btn.MouseEnter:Connect(function()
+            tween(s, { Transparency = 0.1 }, 0.1)
+            tween(btn, { BackgroundColor3 = th.Surface }, 0.1)
+        end)
+        btn.MouseLeave:Connect(function()
+            tween(s, { Transparency = 0.6 }, 0.1)
+            tween(btn, { BackgroundColor3 = th.Card }, 0.1)
+        end)
+        btn.MouseButton1Click:Connect(function()
+            ObfUI.setTheme(name, window)
+        end)
+    end
+
+    return frame
+end
+
+function ObfUI.setTheme(name, window)
+    local theme = ObfUI.Themes[name]
+    if not theme then return end
+    ObfUI._currentTheme = theme
+    for _, cb in ipairs(ObfUI._themeCallbacks) do
+        pcall(cb, theme)
+    end
+end
+
+function ObfUI.onThemeChange(cb)
+    table.insert(ObfUI._themeCallbacks, cb)
+end
+
+-- ============================================================
+--  WINDOW
+-- ============================================================
+function ObfUI.Window(cfg)
+    cfg = cfg or {}
+    local T = ObfUI._currentTheme
+
+    local parent = (gethui and gethui()) or CoreGui
+    local existing = parent:FindFirstChild("ObfHubUI_" .. (cfg.Title or "Window"))
+    if existing then existing:Destroy() end
+
+    -- ScreenGui
+    local sg = newInst("ScreenGui", {
+        Name           = "ObfHubUI_" .. (cfg.Title or "Window"),
+        ResetOnSpawn   = false,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+        DisplayOrder   = 999,
+        Parent         = parent,
+    })
+
+    local W = cfg.Width  or 520
+    local H = cfg.Height or 380
+
+    -- Root
+    local root = newInst("Frame", {
+        Parent           = sg,
+        AnchorPoint      = Vector2.new(0.5, 0.5),
+        Position         = UDim2.fromScale(cfg.X or 0.5, cfg.Y or 0.5),
+        Size             = UDim2.fromOffset(W, H),
+        BackgroundColor3 = T.Surface,
+        BorderSizePixel  = 0,
+        ClipsDescendants = false,
+    })
+    corner(root, 8)
+
+    local rootStroke = stroke(root, T.Accent, 1, 0.4)
+
+    -- Star background
+    local starFrame = newInst("Frame", {
+        Size             = UDim2.new(1, 0, 1, 0),
+        BackgroundColor3 = T.Background,
+        BorderSizePixel  = 0,
+        Parent           = root,
+    })
+    corner(starFrame, 8)
+    local killParticles = spawnParticles(starFrame, W, H)
+    sg.Destroying:Connect(killParticles)
+
+    -- Top gradient bar
+    local topBar = newInst("Frame", {
+        Size             = UDim2.new(1, 0, 0, 2),
+        BackgroundColor3 = T.Accent,
+        BorderSizePixel  = 0,
+        ZIndex           = 3,
+        Parent           = root,
+    })
+    gradientMulti(topBar, {
+        ColorSequenceKeypoint.new(0,   T.Accent),
+        ColorSequenceKeypoint.new(0.5, T.Cyan),
+        ColorSequenceKeypoint.new(1,   T.Purple),
+    })
+
+    -- Titlebar
+    local titleBar = newInst("Frame", {
+        Size             = UDim2.new(1, 0, 0, 36),
+        Position         = UDim2.fromOffset(0, 2),
+        BackgroundTransparency = 1,
+        ZIndex           = 4,
+        Parent           = root,
+    })
+    padding(titleBar, 0, 0, 14, 14)
+
+    local titleLbl = label(titleBar, cfg.Title or "ObfHub", 13, T.Accent)
+    titleLbl.Size     = UDim2.new(0.6, 0, 1, 0)
+    titleLbl.ZIndex   = 4
+    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    titleLbl.Font     = FONT
+    titleLbl.FontFace = Font.new("rbxasset://fonts/families/RobotoMono.json", Enum.FontWeight.Bold)
+
+    local subtitleLbl = label(titleBar, cfg.Subtitle or "v1.0", 9, T.TextMuted)
+    subtitleLbl.Size           = UDim2.new(0.4, 0, 1, 0)
+    subtitleLbl.Position       = UDim2.new(0.6, 0, 0, 0)
+    subtitleLbl.TextXAlignment = Enum.TextXAlignment.Right
+    subtitleLbl.ZIndex         = 4
+
+    -- Close button
+    local closeBtn = newInst("TextButton", {
+        Size             = UDim2.fromOffset(18, 18),
+        Position         = UDim2.new(1, -28, 0.5, -9),
+        BackgroundColor3 = Color3.fromRGB(40, 20, 35),
+        Text             = "×",
+        Font             = FONT,
+        TextSize         = 14,
+        TextColor3       = T.Accent,
+        AutoButtonColor  = false,
+        ZIndex           = 5,
+        Parent           = titleBar,
+    })
+    corner(closeBtn, 4)
+    closeBtn.MouseButton1Click:Connect(function() sg:Destroy() end)
+    closeBtn.MouseEnter:Connect(function() tween(closeBtn, { BackgroundColor3 = T.Accent }, 0.1) tween(closeBtn, { TextColor3 = Color3.fromRGB(255,255,255) }, 0.1) end)
+    closeBtn.MouseLeave:Connect(function() tween(closeBtn, { BackgroundColor3 = Color3.fromRGB(40,20,35) }, 0.1) tween(closeBtn, { TextColor3 = T.Accent }, 0.1) end)
+
+    -- Minimise button
+    local minBtn = newInst("TextButton", {
+        Size             = UDim2.fromOffset(18, 18),
+        Position         = UDim2.new(1, -50, 0.5, -9),
+        BackgroundColor3 = Color3.fromRGB(30, 30, 20),
+        Text             = "−",
+        Font             = FONT,
+        TextSize         = 14,
+        TextColor3       = T.Yellow,
+        AutoButtonColor  = false,
+        ZIndex           = 5,
+        Parent           = titleBar,
+    })
+    corner(minBtn, 4)
+    local minimised = false
+    local originalH = H
+    minBtn.MouseButton1Click:Connect(function()
+        minimised = not minimised
+        tween(root, { Size = UDim2.fromOffset(W, minimised and 38 or originalH) }, 0.25, Enum.EasingStyle.Quart)
+    end)
+    minBtn.MouseEnter:Connect(function() tween(minBtn, { BackgroundColor3 = T.Yellow }, 0.1) tween(minBtn, { TextColor3 = Color3.fromRGB(0,0,0) }, 0.1) end)
+    minBtn.MouseLeave:Connect(function() tween(minBtn, { BackgroundColor3 = Color3.fromRGB(30,30,20) }, 0.1) tween(minBtn, { TextColor3 = T.Yellow }, 0.1) end)
+
+    makeDraggable(titleBar, root)
+
+    -- Tab bar
+    local tabBar = newInst("Frame", {
+        Size             = UDim2.new(1, 0, 0, 28),
+        Position         = UDim2.fromOffset(0, 38),
+        BackgroundColor3 = T.Card,
+        BorderSizePixel  = 0,
+        ZIndex           = 3,
+        Parent           = root,
+        ClipsDescendants = true,
+    })
+    local tabList = newInst("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        Padding = UDim.new(0, 1),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Parent = tabBar,
+    })
+    padding(tabBar, 0, 0, 6, 6)
+
+    -- Active indicator line under selected tab
+    local tabIndicator = newInst("Frame", {
+        Size             = UDim2.fromOffset(0, 1),
+        Position         = UDim2.new(0, 0, 1, -1),
+        BackgroundColor3 = T.Accent,
+        BorderSizePixel  = 0,
+        ZIndex           = 5,
+        Parent           = tabBar,
+    })
+
+    -- Content area
+    local contentArea = newInst("Frame", {
+        Size             = UDim2.new(1, 0, 1, -68),
+        Position         = UDim2.fromOffset(0, 68),
+        BackgroundTransparency = 1,
+        ClipsDescendants = true,
+        ZIndex           = 2,
+        Parent           = root,
+    })
+
+    -- Footer
+    local footerLbl = label(root, "ObfHub  •  theobfuscated", 9, T.Border)
+    footerLbl.Size     = UDim2.new(1, 0, 0, 16)
+    footerLbl.Position = UDim2.new(0, 0, 1, -16)
+    footerLbl.TextXAlignment = Enum.TextXAlignment.Center
+    footerLbl.ZIndex   = 3
+
+    -- Theme change handler
+    ObfUI.onThemeChange(function(theme)
+        T = theme
+        root.BackgroundColor3      = theme.Surface
+        starFrame.BackgroundColor3 = theme.Background
+        rootStroke.Color           = theme.Accent
+        topBar.BackgroundColor3    = theme.Accent
+        tabBar.BackgroundColor3    = theme.Card
+        titleLbl.TextColor3        = theme.Accent
+        subtitleLbl.TextColor3     = theme.TextMuted
+        footerLbl.TextColor3       = theme.Border
+        tabIndicator.BackgroundColor3 = theme.Accent
+        gradientMulti(topBar, {
+            ColorSequenceKeypoint.new(0,   theme.Accent),
+            ColorSequenceKeypoint.new(0.5, theme.Cyan),
+            ColorSequenceKeypoint.new(1,   theme.Purple),
+        })
+    end)
+
+    -- ── Window object ──────────────────────────────────────────
+    local win = { _sg = sg, _root = root, _tabs = {}, _activeTab = nil, _T = T }
+
+    function win:Tab(name, icon)
+        local T = ObfUI._currentTheme
+        local tabBtn = newInst("TextButton", {
+            Size             = UDim2.new(0, 0, 1, 0),
+            AutomaticSize    = Enum.AutomaticSize.X,
+            BackgroundColor3 = T.Card,
+            Text             = "",
+            AutoButtonColor  = false,
+            ZIndex           = 4,
+            Parent           = tabBar,
+        })
+        padding(tabBtn, 0, 0, 10, 10)
+        local tabLbl = label(tabBtn, (icon and icon .. "  " or "") .. name, 10, T.TextDim)
+        tabLbl.Size = UDim2.new(0, 0, 1, 0)
+        tabLbl.AutomaticSize = Enum.AutomaticSize.X
+        tabLbl.ZIndex = 4
+
+        -- Tab content scroll frame
+        local tabContent = newInst("ScrollingFrame", {
+            Size             = UDim2.new(1, 0, 1, 0),
+            BackgroundTransparency = 1,
+            BorderSizePixel  = 0,
+            ScrollBarThickness = 2,
+            ScrollBarImageColor3 = T.Accent,
+            CanvasSize       = UDim2.new(0, 0, 0, 0),
+            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            Visible          = false,
+            ZIndex           = 2,
+            Parent           = contentArea,
+        })
+        padding(tabContent, 8, 8, 10, 10)
+        local contentList = listLayout(tabContent, nil, 6)
+        contentList.Padding = UDim.new(0, 6)
+
+        local tab = { _btn = tabBtn, _content = tabContent, _name = name, _win = self }
+
+        tabBtn.MouseButton1Click:Connect(function()
+            self:_selectTab(tab)
+        end)
+        tabBtn.MouseEnter:Connect(function()
+            if self._activeTab ~= tab then
+                tween(tabLbl, { TextColor3 = T.Text }, 0.1)
+            end
+        end)
+        tabBtn.MouseLeave:Connect(function()
+            if self._activeTab ~= tab then
+                tween(tabLbl, { TextColor3 = T.TextDim }, 0.1)
+            end
+        end)
+
+        -- Theme handler
+        ObfUI.onThemeChange(function(theme)
+            tabBtn.BackgroundColor3 = theme.Card
+            tabContent.ScrollBarImageColor3 = theme.Accent
+            if self._activeTab == tab then
+                tabLbl.TextColor3 = theme.Accent
+            else
+                tabLbl.TextColor3 = theme.TextDim
+            end
+        end)
+
+        table.insert(self._tabs, tab)
+        if #self._tabs == 1 then self:_selectTab(tab) end
+
+        -- Section builder
+        function tab:Section(name)
+            local T = ObfUI._currentTheme
+
+            local sectionFrame = newInst("Frame", {
+                Size             = UDim2.new(1, 0, 0, 0),
+                BackgroundColor3 = T.Card,
+                BorderSizePixel  = 0,
+                Parent           = tabContent,
+                ClipsDescendants = false,
+            })
+            corner(sectionFrame, 6)
+            local secStroke = stroke(sectionFrame, T.BorderLight, 1, 0.85)
+
+            -- Section header
+            local secHeader = newInst("Frame", {
+                Size             = UDim2.new(1, 0, 0, 26),
+                BackgroundColor3 = T.Surface,
+                BorderSizePixel  = 0,
+                Parent           = sectionFrame,
+            })
+            corner(secHeader, 6)
+            padding(secHeader, 0, 0, 10, 10)
+
+            local secTopLine = newInst("Frame", {
+                Size             = UDim2.new(1, 0, 0, 1),
+                Position         = UDim2.new(0, 0, 1, -1),
+                BackgroundColor3 = T.Accent,
+                BorderSizePixel  = 0,
+                Parent           = secHeader,
+            })
+            gradient(secTopLine, T.Accent, Color3.fromRGB(0,0,0))
+            newInst("UIGradient", {
+                Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 0),
+                    NumberSequenceKeypoint.new(0.6, 0.5),
+                    NumberSequenceKeypoint.new(1, 1),
+                }),
+                Parent = secTopLine,
+            })
+
+            local secLbl = label(secHeader, name, 10, T.TextDim)
+            secLbl.Size = UDim2.new(1, 0, 1, 0)
+            secLbl.Font = FONT
+
+            -- Item container
+            local itemsFrame = newInst("Frame", {
+                Size             = UDim2.new(1, 0, 0, 0),
+                Position         = UDim2.fromOffset(0, 26),
+                BackgroundTransparency = 1,
+                BorderSizePixel  = 0,
+                Parent           = sectionFrame,
+                ClipsDescendants = false,
+            })
+            padding(itemsFrame, 4, 6, 10, 10)
+            local itemsList = listLayout(itemsFrame, nil, 2)
+
+            local function updateSectionSize()
+                local h = 26 + itemsList.AbsoluteContentSize.Y + 10
+                sectionFrame.Size = UDim2.new(1, 0, 0, h)
+            end
+            itemsList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateSectionSize)
+
+            ObfUI.onThemeChange(function(theme)
+                sectionFrame.BackgroundColor3 = theme.Card
+                secHeader.BackgroundColor3    = theme.Surface
+                secStroke.Color               = theme.BorderLight
+                secTopLine.BackgroundColor3   = theme.Accent
+                secLbl.TextColor3             = theme.TextDim
+                gradient(secTopLine, theme.Accent, Color3.fromRGB(0,0,0))
+            end)
+
+            local sec = { _frame = sectionFrame, _items = itemsFrame }
+
+            -- ── TOGGLE ───────────────────────────────────────────────
+            function sec:Toggle(opt)
+                local T = ObfUI._currentTheme
+                opt = opt or {}
+                local val = opt.Default or false
+
+                local row = newInst("Frame", {
+                    Size             = UDim2.new(1, 0, 0, 32),
+                    BackgroundColor3 = T.Surface,
+                    BorderSizePixel  = 0,
+                    Parent           = itemsFrame,
+                })
+                corner(row, 5)
+                padding(row, 0, 0, 8, 8)
+
+                local nameLbl = label(row, opt.Name or "Toggle", 11, T.Text)
+                nameLbl.Size     = UDim2.new(1, -44, 1, 0)
+                nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+                if opt.Description then
+                    nameLbl.Size = UDim2.new(1, -44, 0, 16)
+                    nameLbl.Position = UDim2.fromOffset(0, 4)
+                    local desc = label(row, opt.Description, 9, T.TextMuted)
+                    desc.Size     = UDim2.new(1, -44, 0, 12)
+                    desc.Position = UDim2.fromOffset(0, 18)
+                end
+
+                -- Track
+                local track = newInst("Frame", {
+                    Size             = UDim2.fromOffset(36, 18),
+                    Position         = UDim2.new(1, -36, 0.5, -9),
+                    BackgroundColor3 = val and T.Accent or T.Border,
+                    BorderSizePixel  = 0,
+                    Parent           = row,
+                })
+                corner(track, 99)
+
+                -- Thumb
+                local thumb = newInst("Frame", {
+                    Size             = UDim2.fromOffset(12, 12),
+                    Position         = UDim2.new(0, val and 21 or 3, 0.5, -6),
+                    BackgroundColor3 = Color3.fromRGB(255,255,255),
+                    BorderSizePixel  = 0,
+                    Parent           = track,
+                })
+                corner(thumb, 99)
+
+                -- Glow when active
+                local glow = newInst("UIStroke", { Color = T.Accent, Thickness = 1, Transparency = 1, Parent = track })
+
+                local function setVal(v, animate)
+                    val = v
+                    local targetTrack = v and T.Accent or T.Border
+                    local targetThumb = v and 21 or 3
+                    if animate ~= false then
+                        tween(track, { BackgroundColor3 = targetTrack }, 0.15)
+                        tween(thumb, { Position = UDim2.new(0, targetThumb, 0.5, -6) }, 0.15)
+                        tween(glow,  { Transparency = v and 0.6 or 1 }, 0.15)
+                    else
+                        track.BackgroundColor3 = targetTrack
+                        thumb.Position = UDim2.new(0, targetThumb, 0.5, -6)
+                    end
+                    if opt.Callback then pcall(opt.Callback, val) end
+                end
+
+                local btn = newInst("TextButton", {
+                    Size             = UDim2.new(1, 0, 1, 0),
+                    BackgroundTransparency = 1,
+                    Text             = "",
+                    Parent           = row,
+                })
+                btn.MouseButton1Click:Connect(function() setVal(not val) end)
+                btn.MouseEnter:Connect(function() tween(row, { BackgroundColor3 = T.Card }, 0.1) end)
+                btn.MouseLeave:Connect(function() tween(row, { BackgroundColor3 = T.Surface }, 0.1) end)
+
+                setVal(val, false)
+
+                ObfUI.onThemeChange(function(theme)
+                    T = theme
+                    row.BackgroundColor3   = theme.Surface
+                    nameLbl.TextColor3     = theme.Text
+                    track.BackgroundColor3 = val and theme.Accent or theme.Border
+                    glow.Color             = theme.Accent
+                end)
+
+                return { Set = setVal, Get = function() return val end }
+            end
+
+            -- ── CHECKBOX ─────────────────────────────────────────────
+            function sec:Checkbox(opt)
+                local T = ObfUI._currentTheme
+                opt = opt or {}
+                local val = opt.Default or false
+
+                local row = newInst("Frame", {
+                    Size             = UDim2.new(1, 0, 0, 30),
+                    BackgroundColor3 = T.Surface,
+                    BorderSizePixel  = 0,
+                    Parent           = itemsFrame,
+                })
+                corner(row, 5)
+                padding(row, 0, 0, 8, 8)
+
+                -- Box
+                local box = newInst("Frame", {
+                    Size             = UDim2.fromOffset(16, 16),
+                    Position         = UDim2.new(0, 0, 0.5, -8),
+                    BackgroundColor3 = val and T.Accent or T.Input,
+                    BorderSizePixel  = 0,
+                    Parent           = row,
+                })
+                corner(box, 4)
+                local boxStroke = stroke(box, val and T.Accent or T.Border, 1, 0)
+
+                -- Checkmark
+                local check = label(box, "✓", 11, Color3.fromRGB(255,255,255))
+                check.Size = UDim2.new(1, 0, 1, 0)
+                check.TextXAlignment = Enum.TextXAlignment.Center
+                check.BackgroundTransparency = 1
+                check.TextTransparency = val and 0 or 1
+
+                local nameLbl = label(row, opt.Name or "Checkbox", 11, T.Text)
+                nameLbl.Size     = UDim2.new(1, -26, 1, 0)
+                nameLbl.Position = UDim2.fromOffset(24, 0)
+
+                local function setVal(v, animate)
+                    val = v
+                    if animate ~= false then
+                        tween(box,   { BackgroundColor3 = v and T.Accent or T.Input }, 0.12)
+                        tween(boxStroke, { Color = v and T.Accent or T.Border }, 0.12)
+                        tween(check, { TextTransparency = v and 0 or 1 }, 0.1)
+                    else
+                        box.BackgroundColor3 = v and T.Accent or T.Input
+                        boxStroke.Color      = v and T.Accent or T.Border
+                        check.TextTransparency = v and 0 or 1
+                    end
+                    if opt.Callback then pcall(opt.Callback, val) end
+                end
+
+                local btn = newInst("TextButton", {
+                    Size             = UDim2.new(1, 0, 1, 0),
+                    BackgroundTransparency = 1,
+                    Text             = "",
+                    Parent           = row,
+                })
+                btn.MouseButton1Click:Connect(function() setVal(not val) end)
+                btn.MouseEnter:Connect(function() tween(row, { BackgroundColor3 = T.Card }, 0.1) end)
+                btn.MouseLeave:Connect(function() tween(row, { BackgroundColor3 = T.Surface }, 0.1) end)
+
+                setVal(val, false)
+
+                ObfUI.onThemeChange(function(theme)
+                    T = theme
+                    row.BackgroundColor3 = theme.Surface
+                    nameLbl.TextColor3   = theme.Text
+                    box.BackgroundColor3 = val and theme.Accent or theme.Input
+                    boxStroke.Color      = val and theme.Accent or theme.Border
+                end)
+
+                return { Set = setVal, Get = function() return val end }
+            end
+
+            -- ── SLIDER ───────────────────────────────────────────────
+            function sec:Slider(opt)
+                local T = ObfUI._currentTheme
+                opt = opt or {}
+                local min = opt.Min or 0
+                local max = opt.Max or 100
+                local val = math.clamp(opt.Default or min, min, max)
+                local suffix = opt.Suffix or ""
+
+                local row = newInst("Frame", {
+                    Size             = UDim2.new(1, 0, 0, 44),
+                    BackgroundColor3 = T.Surface,
+                    BorderSizePixel  = 0,
+                    Parent           = itemsFrame,
+                })
+                corner(row, 5)
+                padding(row, 6, 6, 8, 8)
+
+                local topRow = newInst("Frame", {
+                    Size             = UDim2.new(1, 0, 0, 16),
+                    BackgroundTransparency = 1,
+                    Parent           = row,
+                })
+
+                local nameLbl = label(topRow, opt.Name or "Slider", 11, T.Text)
+                nameLbl.Size = UDim2.new(0.7, 0, 1, 0)
+
+                local valLbl = label(topRow, tostring(val) .. suffix, 11, T.Accent)
+                valLbl.Size           = UDim2.new(0.3, 0, 1, 0)
+                valLbl.Position       = UDim2.new(0.7, 0, 0, 0)
+                valLbl.TextXAlignment = Enum.TextXAlignment.Right
+
+                -- Track
+                local track = newInst("Frame", {
+                    Size             = UDim2.new(1, 0, 0, 6),
+                    Position         = UDim2.new(0, 0, 1, -8),
+                    BackgroundColor3 = T.Input,
+                    BorderSizePixel  = 0,
+                    Parent           = row,
+                })
+                corner(track, 99)
+
+                -- Fill
+                local fill = newInst("Frame", {
+                    Size             = UDim2.new(0, 0, 1, 0),
+                    BackgroundColor3 = T.Accent,
+                    BorderSizePixel  = 0,
+                    Parent           = track,
+                })
+                corner(fill, 99)
+                gradient(fill, T.Accent, T.Cyan)
+
+                -- Thumb
+                local thumb = newInst("Frame", {
+                    Size             = UDim2.fromOffset(12, 12),
+                    AnchorPoint      = Vector2.new(0.5, 0.5),
+                    BackgroundColor3 = Color3.fromRGB(255,255,255),
+                    BorderSizePixel  = 0,
+                    ZIndex           = 3,
+                    Parent           = track,
+                })
+                corner(thumb, 99)
+                newInst("UIStroke", { Color = T.Accent, Thickness = 1.5, Parent = thumb })
+
+                local function updateVisual(v)
+                    local pct = (v - min) / (max - min)
+                    fill.Size = UDim2.new(pct, 0, 1, 0)
+                    thumb.Position = UDim2.new(pct, 0, 0.5, 0)
+                    valLbl.Text = (opt.Float and string.format("%.2f", v) or tostring(math.floor(v))) .. suffix
+                end
+
+                local function setVal(v)
+                    val = math.clamp(opt.Float and v or math.floor(v + 0.5), min, max)
+                    updateVisual(val)
+                    if opt.Callback then pcall(opt.Callback, val) end
+                end
+
+                -- Drag
+                local dragging = false
+                local function handleInput(input)
+                    local absTrack = track.AbsolutePosition
+                    local absSize  = track.AbsoluteSize
+                    local relX     = math.clamp(input.Position.X - absTrack.X, 0, absSize.X)
+                    local pct      = relX / absSize.X
+                    setVal(min + (max - min) * pct)
+                end
+
+                track.InputBegan:Connect(function(i)
+                    if i.UserInputType == Enum.UserInputType.MouseButton1 then
+                        dragging = true
+                        handleInput(i)
+                    end
+                end)
+                track.InputEnded:Connect(function(i)
+                    if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+                end)
+                UserInputService.InputChanged:Connect(function(i)
+                    if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+                        handleInput(i)
+                    end
+                end)
+
+                row.MouseEnter:Connect(function() tween(row, { BackgroundColor3 = T.Card }, 0.1) end)
+                row.MouseLeave:Connect(function() tween(row, { BackgroundColor3 = T.Surface }, 0.1) end)
+
+                updateVisual(val)
+
+                ObfUI.onThemeChange(function(theme)
+                    T = theme
+                    row.BackgroundColor3  = theme.Surface
+                    nameLbl.TextColor3    = theme.Text
+                    valLbl.TextColor3     = theme.Accent
+                    track.BackgroundColor3 = theme.Input
+                    fill.BackgroundColor3 = theme.Accent
+                    gradient(fill, theme.Accent, theme.Cyan)
+                end)
+
+                return { Set = setVal, Get = function() return val end }
+            end
+
+            -- ── DROPDOWN ─────────────────────────────────────────────
+            function sec:Dropdown(opt)
+                local T = ObfUI._currentTheme
+                opt = opt or {}
+                local items = opt.Items or {}
+                local val   = opt.Default or items[1]
+                local open  = false
+
+                local wrapper = newInst("Frame", {
+                    Size             = UDim2.new(1, 0, 0, 32),
+                    BackgroundTransparency = 1,
+                    ZIndex           = 5,
+                    Parent           = itemsFrame,
+                    ClipsDescendants = false,
+                })
+
+                local row = newInst("Frame", {
+                    Size             = UDim2.new(1, 0, 0, 32),
+                    BackgroundColor3 = T.Surface,
+                    BorderSizePixel  = 0,
+                    ZIndex           = 5,
+                    Parent           = wrapper,
+                })
+                corner(row, 5)
+                padding(row, 0, 0, 8, 8)
+
+                local nameLbl = label(row, opt.Name or "Dropdown", 11, T.Text)
+                nameLbl.Size   = UDim2.new(0.5, 0, 1, 0)
+                nameLbl.ZIndex = 5
+
+                local valBtn = newInst("TextButton", {
+                    Size             = UDim2.new(0.5, -4, 0, 22),
+                    Position         = UDim2.new(0.5, 4, 0.5, -11),
+                    BackgroundColor3 = T.Input,
+                    Text             = "",
+                    AutoButtonColor  = false,
+                    ZIndex           = 5,
+                    Parent           = row,
+                })
+                corner(valBtn, 4)
+                stroke(valBtn, T.Border, 1, 0)
+
+                local valLbl = label(valBtn, tostring(val or "Select..."), 10, T.TextDim)
+                valLbl.Size           = UDim2.new(1, -20, 1, 0)
+                valLbl.TextXAlignment = Enum.TextXAlignment.Center
+                valLbl.ZIndex         = 5
+
+                local arrow = label(valBtn, "▾", 10, T.TextMuted)
+                arrow.Size             = UDim2.fromOffset(16, 16)
+                arrow.Position         = UDim2.new(1, -16, 0.5, -8)
+                arrow.TextXAlignment   = Enum.TextXAlignment.Center
+                arrow.ZIndex           = 5
+
+                -- Dropdown list
+                local dropList = newInst("Frame", {
+                    Size             = UDim2.new(0.5, -4, 0, 0),
+                    Position         = UDim2.new(0.5, 4, 1, 2),
+                    BackgroundColor3 = T.Card,
+                    BorderSizePixel  = 0,
+                    Visible          = false,
+                    ZIndex           = 20,
+                    Parent           = wrapper,
+                    ClipsDescendants = true,
+                })
+                corner(dropList, 5)
+                stroke(dropList, T.Accent, 1, 0.4)
+                local dropLayout = listLayout(dropList, nil, 1)
+                padding(dropList, 3, 3, 0, 0)
+
+                local function setVal(v)
+                    val = v
+                    valLbl.Text      = tostring(v)
+                    valLbl.TextColor3 = T.Text
+                    open = false
+                    tween(dropList, { Size = UDim2.new(0.5, -4, 0, 0) }, 0.15, Enum.EasingStyle.Quart)
+                    tween(arrow, { Rotation = 0 }, 0.15)
+                    task.delay(0.15, function() dropList.Visible = false end)
+                    if opt.Callback then pcall(opt.Callback, val) end
+                end
+
+                local function populateItems()
+                    for _, c in ipairs(dropList:GetChildren()) do
+                        if c:IsA("TextButton") then c:Destroy() end
+                    end
+                    for _, item in ipairs(items) do
+                        local btn = newInst("TextButton", {
+                            Size             = UDim2.new(1, 0, 0, 26),
+                            BackgroundColor3 = item == val and T.Surface or T.Card,
+                            Text             = "",
+                            AutoButtonColor  = false,
+                            ZIndex           = 20,
+                            Parent           = dropList,
+                        })
+                        padding(btn, 0, 0, 10, 10)
+                        local lbl = label(btn, tostring(item), 10, item == val and T.Accent or T.TextDim)
+                        lbl.Size   = UDim2.new(1, 0, 1, 0)
+                        lbl.ZIndex = 20
+                        btn.MouseEnter:Connect(function() tween(btn, { BackgroundColor3 = T.Surface }, 0.08) tween(lbl, { TextColor3 = T.Text }, 0.08) end)
+                        btn.MouseLeave:Connect(function() tween(btn, { BackgroundColor3 = item == val and T.Surface or T.Card }, 0.08) tween(lbl, { TextColor3 = item == val and T.Accent or T.TextDim }, 0.08) end)
+                        btn.MouseButton1Click:Connect(function() setVal(item) end)
+                    end
+                end
+                populateItems()
+
+                valBtn.MouseButton1Click:Connect(function()
+                    open = not open
+                    if open then
+                        populateItems()
+                        local totalH = dropLayout.AbsoluteContentSize.Y + 6
+                        dropList.Visible = true
+                        dropList.Size    = UDim2.new(0.5, -4, 0, 0)
+                        tween(dropList, { Size = UDim2.new(0.5, -4, 0, math.min(totalH, 120)) }, 0.15, Enum.EasingStyle.Quart)
+                        tween(arrow, { Rotation = 180 }, 0.15)
+                    else
+                        tween(dropList, { Size = UDim2.new(0.5, -4, 0, 0) }, 0.15, Enum.EasingStyle.Quart)
+                        tween(arrow, { Rotation = 0 }, 0.15)
+                        task.delay(0.15, function() dropList.Visible = false end)
+                    end
+                end)
+
+                valBtn.MouseEnter:Connect(function() tween(row, { BackgroundColor3 = T.Card }, 0.1) end)
+                valBtn.MouseLeave:Connect(function() tween(row, { BackgroundColor3 = T.Surface }, 0.1) end)
+
+                ObfUI.onThemeChange(function(theme)
+                    T = theme
+                    row.BackgroundColor3      = theme.Surface
+                    nameLbl.TextColor3        = theme.Text
+                    valBtn.BackgroundColor3   = theme.Input
+                    valLbl.TextColor3         = theme.Text
+                    dropList.BackgroundColor3 = theme.Card
+                end)
+
+                return {
+                    Set = setVal,
+                    Get = function() return val end,
+                    Refresh = function(newItems)
+                        items = newItems
+                        populateItems()
+                    end,
+                }
+            end
+
+            -- ── KEYBIND ──────────────────────────────────────────────
+            function sec:Keybind(opt)
+                local T = ObfUI._currentTheme
+                opt = opt or {}
+                local key  = opt.Default or Enum.KeyCode.Unknown
+                local listening = false
+
+                local row = newInst("Frame", {
+                    Size             = UDim2.new(1, 0, 0, 32),
+                    BackgroundColor3 = T.Surface,
+                    BorderSizePixel  = 0,
+                    Parent           = itemsFrame,
+                })
+                corner(row, 5)
+                padding(row, 0, 0, 8, 8)
+
+                local nameLbl = label(row, opt.Name or "Keybind", 11, T.Text)
+                nameLbl.Size = UDim2.new(0.6, 0, 1, 0)
+
+                local keyBtn = newInst("TextButton", {
+                    Size             = UDim2.new(0, 70, 0, 22),
+                    Position         = UDim2.new(1, -70, 0.5, -11),
+                    BackgroundColor3 = T.Input,
+                    Text             = "",
+                    AutoButtonColor  = false,
+                    Parent           = row,
+                })
+                corner(keyBtn, 4)
+                local keyStroke = stroke(keyBtn, T.Border, 1, 0)
+
+                local keyLbl = label(keyBtn, key == Enum.KeyCode.Unknown and "None" or key.Name, 10, T.TextDim)
+                keyLbl.Size           = UDim2.new(1, 0, 1, 0)
+                keyLbl.TextXAlignment = Enum.TextXAlignment.Center
+
+                local function setKey(k)
+                    key = k
+                    keyLbl.Text = k == Enum.KeyCode.Unknown and "None" or k.Name
+                    if opt.Callback then pcall(opt.Callback, key) end
+                end
+
+                keyBtn.MouseButton1Click:Connect(function()
+                    if listening then return end
+                    listening = true
+                    keyLbl.Text       = "..."
+                    keyLbl.TextColor3 = T.Yellow
+                    tween(keyStroke, { Color = T.Accent, Transparency = 0.2 }, 0.1)
+
+                    local conn
+                    conn = UserInputService.InputBegan:Connect(function(i, gpe)
+                        if gpe then return end
+                        if i.UserInputType == Enum.UserInputType.Keyboard then
+                            listening = false
+                            conn:Disconnect()
+                            tween(keyStroke, { Color = T.Border, Transparency = 0 }, 0.1)
+                            tween(keyLbl, { TextColor3 = T.TextDim }, 0.1)
+                            setKey(i.KeyCode)
+                        end
+                    end)
+                end)
+
+                keyBtn.MouseEnter:Connect(function() tween(row, { BackgroundColor3 = T.Card }, 0.1) end)
+                keyBtn.MouseLeave:Connect(function() tween(row, { BackgroundColor3 = T.Surface }, 0.1) end)
+
+                -- Listen for keybind press
+                UserInputService.InputBegan:Connect(function(i, gpe)
+                    if gpe or listening then return end
+                    if i.KeyCode == key and key ~= Enum.KeyCode.Unknown then
+                        if opt.OnPress then pcall(opt.OnPress) end
+                    end
+                end)
+
+                ObfUI.onThemeChange(function(theme)
+                    T = theme
+                    row.BackgroundColor3    = theme.Surface
+                    nameLbl.TextColor3      = theme.Text
+                    keyBtn.BackgroundColor3 = theme.Input
+                    keyLbl.TextColor3       = theme.TextDim
+                    keyStroke.Color         = theme.Border
+                end)
+
+                return { Set = setKey, Get = function() return key end }
+            end
+
+            -- ── BUTTON ───────────────────────────────────────────────
+            function sec:Button(opt)
+                local T = ObfUI._currentTheme
+                opt = opt or {}
+                local style = opt.Style or "accent" -- "accent", "ghost", "danger"
+
+                local bgColors = {
+                    accent  = T.Accent,
+                    ghost   = T.Surface,
+                    danger  = Color3.fromRGB(40, 12, 12),
+                    success = Color3.fromRGB(10, 35, 20),
+                }
+                local hoverColors = {
+                    accent  = T.Purple,
+                    ghost   = T.Card,
+                    danger  = Color3.fromRGB(80, 20, 20),
+                    success = Color3.fromRGB(20, 60, 35),
+                }
+
+                local btn = newInst("TextButton", {
+                    Size             = UDim2.new(1, 0, 0, 32),
+                    BackgroundColor3 = bgColors[style] or T.Accent,
+                    Text             = "",
+                    AutoButtonColor  = false,
+                    BorderSizePixel  = 0,
+                    Parent           = itemsFrame,
+                })
+                corner(btn, 5)
+
+                if style == "ghost" then
+                    stroke(btn, T.Border, 1, 0)
+                end
+                if style == "danger" then
+                    stroke(btn, Color3.fromRGB(120, 30, 30), 1, 0)
+                end
+
+                local lbl = label(btn, opt.Name or "Button", 11,
+                    style == "ghost" and T.Text or Color3.fromRGB(255,255,255))
+                lbl.Size           = UDim2.new(1, 0, 1, 0)
+                lbl.TextXAlignment = Enum.TextXAlignment.Center
+
+                btn.MouseEnter:Connect(function()
+                    tween(btn, { BackgroundColor3 = hoverColors[style] or T.Purple }, 0.1)
+                end)
+                btn.MouseLeave:Connect(function()
+                    tween(btn, { BackgroundColor3 = bgColors[style] or T.Accent }, 0.1)
+                end)
+                btn.MouseButton1Click:Connect(function()
+                    -- Click flash
+                    tween(btn, { BackgroundColor3 = Color3.fromRGB(255,255,255) }, 0.05)
+                    task.delay(0.05, function()
+                        tween(btn, { BackgroundColor3 = bgColors[style] or T.Accent }, 0.1)
+                    end)
+                    if opt.Callback then pcall(opt.Callback) end
+                end)
+
+                ObfUI.onThemeChange(function(theme)
+                    T = theme
+                    bgColors.accent = theme.Accent
+                    bgColors.ghost  = theme.Surface
+                    hoverColors.accent = theme.Purple
+                    hoverColors.ghost  = theme.Card
+                    btn.BackgroundColor3 = bgColors[style] or theme.Accent
+                    lbl.TextColor3 = style == "ghost" and theme.Text or Color3.fromRGB(255,255,255)
+                end)
+
+                return btn
+            end
+
+            -- ── INPUT ────────────────────────────────────────────────
+            function sec:Input(opt)
+                local T = ObfUI._currentTheme
+                opt = opt or {}
+                local val = opt.Default or ""
+
+                local row = newInst("Frame", {
+                    Size             = UDim2.new(1, 0, 0, 46),
+                    BackgroundColor3 = T.Surface,
+                    BorderSizePixel  = 0,
+                    Parent           = itemsFrame,
+                })
+                corner(row, 5)
+                padding(row, 6, 6, 8, 8)
+
+                local nameLbl = label(row, opt.Name or "Input", 11, T.Text)
+                nameLbl.Size = UDim2.new(1, 0, 0, 14)
+
+                local inputFrame = newInst("Frame", {
+                    Size             = UDim2.new(1, 0, 0, 22),
+                    Position         = UDim2.fromOffset(0, 16),
+                    BackgroundColor3 = T.Input,
+                    BorderSizePixel  = 0,
+                    Parent           = row,
+                })
+                corner(inputFrame, 4)
+                local inputStroke = stroke(inputFrame, T.Border, 1, 0)
+
+                local box = newInst("TextBox", {
+                    Size                 = UDim2.new(1, -10, 1, 0),
+                    Position             = UDim2.fromOffset(5, 0),
+                    BackgroundTransparency = 1,
+                    Text                 = val,
+                    PlaceholderText      = opt.Placeholder or "Enter text...",
+                    Font                 = FONT,
+                    TextSize             = 11,
+                    TextColor3           = T.Text,
+                    PlaceholderColor3    = T.TextMuted,
+                    ClearTextOnFocus     = opt.ClearOnFocus or false,
+                    Parent               = inputFrame,
+                })
+
+                box.Focused:Connect(function()
+                    tween(inputStroke, { Color = T.Accent, Transparency = 0.1 }, 0.15)
+                end)
+                box.FocusLost:Connect(function(enter)
+                    tween(inputStroke, { Color = T.Border, Transparency = 0 }, 0.15)
+                    val = box.Text
+                    if opt.Callback then pcall(opt.Callback, val, enter) end
+                end)
+
+                row.MouseEnter:Connect(function() tween(row, { BackgroundColor3 = T.Card }, 0.1) end)
+                row.MouseLeave:Connect(function() tween(row, { BackgroundColor3 = T.Surface }, 0.1) end)
+
+                ObfUI.onThemeChange(function(theme)
+                    T = theme
+                    row.BackgroundColor3        = theme.Surface
+                    nameLbl.TextColor3          = theme.Text
+                    inputFrame.BackgroundColor3 = theme.Input
+                    inputStroke.Color           = theme.Border
+                    box.TextColor3              = theme.Text
+                    box.PlaceholderColor3       = theme.TextMuted
+                end)
+
+                return {
+                    Set = function(v) val = v; box.Text = v end,
+                    Get = function() return box.Text end,
+                }
+            end
+
+            -- ── LABEL ────────────────────────────────────────────────
+            function sec:Label(opt)
+                local T = ObfUI._currentTheme
+                opt = opt or {}
+                local style = opt.Style or "default" -- "default", "info", "success", "warning", "error"
+
+                local colors = {
+                    default = { bg = T.Surface,                       text = T.TextDim,  border = T.Border },
+                    info    = { bg = Color3.fromRGB(5, 20, 30),       text = T.Cyan,     border = T.Cyan   },
+                    success = { bg = Color3.fromRGB(5, 25, 15),       text = T.Green,    border = T.Green  },
+                    warning = { bg = Color3.fromRGB(25, 18, 5),       text = T.Yellow,   border = T.Yellow },
+                    error   = { bg = Color3.fromRGB(25, 5, 5),        text = T.Red,      border = T.Red    },
+                }
+                local c = colors[style] or colors.default
+
+                local row = newInst("Frame", {
+                    Size             = UDim2.new(1, 0, 0, 28),
+                    BackgroundColor3 = c.bg,
+                    BorderSizePixel  = 0,
+                    Parent           = itemsFrame,
+                })
+                corner(row, 5)
+                padding(row, 0, 0, 8, 8)
+
+                if style ~= "default" then
+                    stroke(row, c.border, 1, 0.6)
+                end
+
+                local icon = style == "info" and "ℹ " or style == "success" and "✓ " or
+                             style == "warning" and "⚠ " or style == "error" and "✗ " or ""
+
+                local lbl = label(row, icon .. (opt.Text or "Label"), 11, c.text)
+                lbl.Size = UDim2.new(1, 0, 1, 0)
+
+                return {
+                    Set = function(text) lbl.Text = icon .. text end,
+                }
+            end
+
+            -- ── COLOR PICKER ─────────────────────────────────────────
+            function sec:ColorPicker(opt)
+                local T = ObfUI._currentTheme
+                opt = opt or {}
+                local val = opt.Default or Color3.fromRGB(255, 0, 242)
+                local open = false
+
+                local row = newInst("Frame", {
+                    Size             = UDim2.new(1, 0, 0, 32),
+                    BackgroundColor3 = T.Surface,
+                    BorderSizePixel  = 0,
+                    Parent           = itemsFrame,
+                    ClipsDescendants = false,
+                    ZIndex           = 4,
+                })
+                corner(row, 5)
+                padding(row, 0, 0, 8, 8)
+
+                local nameLbl = label(row, opt.Name or "Color", 11, T.Text)
+                nameLbl.Size = UDim2.new(0.7, 0, 1, 0)
+
+                -- Swatch
+                local swatch = newInst("TextButton", {
+                    Size             = UDim2.fromOffset(40, 20),
+                    Position         = UDim2.new(1, -40, 0.5, -10),
+                    BackgroundColor3 = val,
+                    Text             = "",
+                    AutoButtonColor  = false,
+                    ZIndex           = 4,
+                    Parent           = row,
+                })
+                corner(swatch, 4)
+                stroke(swatch, T.Border, 1, 0)
+
+                -- Simple HSV picker popup
+                local picker = newInst("Frame", {
+                    Size             = UDim2.fromOffset(180, 130),
+                    Position         = UDim2.new(1, -180, 1, 4),
+                    BackgroundColor3 = T.Card,
+                    BorderSizePixel  = 0,
+                    Visible          = false,
+                    ZIndex           = 30,
+                    Parent           = row,
+                })
+                corner(picker, 6)
+                stroke(picker, T.Accent, 1, 0.3)
+                padding(picker, 8, 8, 8, 8)
+
+                local H_, S_, V_ = Color3.toHSV(val)
+
+                -- SV gradient box
+                local svBox = newInst("ImageLabel", {
+                    Size             = UDim2.new(1, 0, 0, 80),
+                    BackgroundColor3 = Color3.fromHSV(H_, 1, 1),
+                    Image            = "rbxassetid://698052001",
+                    ZIndex           = 31,
+                    Parent           = picker,
+                })
+                corner(svBox, 4)
+
+                -- SV cursor
+                local svCursor = newInst("Frame", {
+                    Size             = UDim2.fromOffset(8, 8),
+                    AnchorPoint      = Vector2.new(0.5, 0.5),
+                    Position         = UDim2.new(S_, 0, 1 - V_, 0),
+                    BackgroundColor3 = Color3.fromRGB(255,255,255),
+                    BorderSizePixel  = 0,
+                    ZIndex           = 32,
+                    Parent           = svBox,
+                })
+                corner(svCursor, 99)
+                stroke(svCursor, Color3.fromRGB(0,0,0), 1, 0)
+
+                -- Hue bar
+                local hueBar = newInst("ImageLabel", {
+                    Size     = UDim2.new(1, 0, 0, 10),
+                    Position = UDim2.fromOffset(0, 86),
+                    Image    = "rbxassetid://698053617",
+                    ZIndex   = 31,
+                    Parent   = picker,
+                })
+                corner(hueBar, 4)
+
+                local hueCursor = newInst("Frame", {
+                    Size             = UDim2.fromOffset(4, 14),
+                    AnchorPoint      = Vector2.new(0.5, 0.5),
+                    Position         = UDim2.new(H_, 0, 0.5, 0),
+                    BackgroundColor3 = Color3.fromRGB(255,255,255),
+                    BorderSizePixel  = 0,
+                    ZIndex           = 32,
+                    Parent           = hueBar,
+                })
+                corner(hueCursor, 2)
+
+                local function updateColor()
+                    val = Color3.fromHSV(H_, S_, V_)
+                    swatch.BackgroundColor3 = val
+                    svBox.BackgroundColor3  = Color3.fromHSV(H_, 1, 1)
+                    svCursor.Position       = UDim2.new(S_, 0, 1 - V_, 0)
+                    hueCursor.Position      = UDim2.new(H_, 0, 0.5, 0)
+                    if opt.Callback then pcall(opt.Callback, val) end
+                end
+
+                -- SV drag
+                local svDrag = false
+                svBox.InputBegan:Connect(function(i)
+                    if i.UserInputType == Enum.UserInputType.MouseButton1 then
+                        svDrag = true
+                        local abs = svBox.AbsolutePosition
+                        local sz  = svBox.AbsoluteSize
+                        S_ = math.clamp((i.Position.X - abs.X) / sz.X, 0, 1)
+                        V_ = 1 - math.clamp((i.Position.Y - abs.Y) / sz.Y, 0, 1)
+                        updateColor()
+                    end
+                end)
+                svBox.InputEnded:Connect(function(i)
+                    if i.UserInputType == Enum.UserInputType.MouseButton1 then svDrag = false end
+                end)
+                UserInputService.InputChanged:Connect(function(i)
+                    if svDrag and i.UserInputType == Enum.UserInputType.MouseMovement then
+                        local abs = svBox.AbsolutePosition
+                        local sz  = svBox.AbsoluteSize
+                        S_ = math.clamp((i.Position.X - abs.X) / sz.X, 0, 1)
+                        V_ = 1 - math.clamp((i.Position.Y - abs.Y) / sz.Y, 0, 1)
+                        updateColor()
+                    end
+                end)
+
+                -- Hue drag
+                local hueDrag = false
+                hueBar.InputBegan:Connect(function(i)
+                    if i.UserInputType == Enum.UserInputType.MouseButton1 then
+                        hueDrag = true
+                        local abs = hueBar.AbsolutePosition
+                        local sz  = hueBar.AbsoluteSize
+                        H_ = math.clamp((i.Position.X - abs.X) / sz.X, 0, 1)
+                        updateColor()
+                    end
+                end)
+                hueBar.InputEnded:Connect(function(i)
+                    if i.UserInputType == Enum.UserInputType.MouseButton1 then hueDrag = false end
+                end)
+                UserInputService.InputChanged:Connect(function(i)
+                    if hueDrag and i.UserInputType == Enum.UserInputType.MouseMovement then
+                        local abs = hueBar.AbsolutePosition
+                        local sz  = hueBar.AbsoluteSize
+                        H_ = math.clamp((i.Position.X - abs.X) / sz.X, 0, 1)
+                        updateColor()
+                    end
+                end)
+
+                swatch.MouseButton1Click:Connect(function()
+                    open = not open
+                    picker.Visible = open
+                end)
+
+                ObfUI.onThemeChange(function(theme)
+                    T = theme
+                    row.BackgroundColor3    = theme.Surface
+                    nameLbl.TextColor3      = theme.Text
+                    picker.BackgroundColor3 = theme.Card
+                end)
+
+                return {
+                    Set = function(c)
+                        val = c
+                        H_, S_, V_ = Color3.toHSV(c)
+                        updateColor()
+                    end,
+                    Get = function() return val end,
+                }
+            end
+
+            -- ── SEPARATOR ────────────────────────────────────────────
+            function sec:Separator()
+                local T = ObfUI._currentTheme
+                local line = newInst("Frame", {
+                    Size             = UDim2.new(1, 0, 0, 1),
+                    BackgroundColor3 = T.Border,
+                    BorderSizePixel  = 0,
+                    Parent           = itemsFrame,
+                })
+                ObfUI.onThemeChange(function(theme) line.BackgroundColor3 = theme.Border end)
+            end
+
+            updateSectionSize()
+            return sec
+        end
+
+        return tab
+    end
+
+    function win:_selectTab(tab)
+        for _, t in ipairs(self._tabs) do
+            t._content.Visible = (t == tab)
+            local lbl = t._btn:FindFirstChildOfClass("TextLabel")
+            local T   = ObfUI._currentTheme
+            if t == tab then
+                tween(lbl, { TextColor3 = T.Accent }, 0.15)
+                tween(t._btn, { BackgroundColor3 = T.Surface }, 0.15)
+            else
+                tween(lbl, { TextColor3 = T.TextDim }, 0.15)
+                tween(t._btn, { BackgroundColor3 = T.Card }, 0.15)
+            end
+        end
+        -- Move indicator under active tab
+        task.defer(function()
+            local abs = tab._btn.AbsolutePosition
+            local tabBarAbs = tabBar.AbsolutePosition
+            tween(tabIndicator, {
+                Position = UDim2.new(0, abs.X - tabBarAbs.X, 1, -1),
+                Size     = UDim2.fromOffset(tab._btn.AbsoluteSize.X, 1),
+            }, 0.2, Enum.EasingStyle.Quart)
+        end)
+        self._activeTab = tab
+    end
+
+    -- Notification system
+    function win:Notify(opt)
+        local T = ObfUI._currentTheme
+        opt = opt or {}
+        local style = opt.Style or "info"
+
+        local colors = {
+            info    = T.Cyan,
+            success = T.Green,
+            warning = T.Yellow,
+            error   = T.Red,
+        }
+        local icons = { info = "ℹ", success = "✓", warning = "⚠", error = "✗" }
+        local c = colors[style] or T.Cyan
+
+        local notif = newInst("Frame", {
+            Size             = UDim2.fromOffset(240, 0),
+            AutomaticSize    = Enum.AutomaticSize.Y,
+            Position         = UDim2.new(1, -250, 1, 10),
+            BackgroundColor3 = T.Card,
+            BorderSizePixel  = 0,
+            ZIndex           = 100,
+            Parent           = sg,
+        })
+        corner(notif, 6)
+        stroke(notif, c, 1, 0.3)
+
+        -- Left accent bar
+        local bar = newInst("Frame", {
+            Size             = UDim2.new(0, 2, 1, 0),
+            BackgroundColor3 = c,
+            BorderSizePixel  = 0,
+            ZIndex           = 101,
+            Parent           = notif,
+        })
+        newInst("UICorner", { CornerRadius = UDim.new(0, 6) }, bar)
+
+        local inner = newInst("Frame", {
+            Size             = UDim2.new(1, -10, 0, 0),
+            AutomaticSize    = Enum.AutomaticSize.Y,
+            Position         = UDim2.fromOffset(10, 0),
+            BackgroundTransparency = 1,
+            ZIndex           = 101,
+            Parent           = notif,
+        })
+        padding(inner, 8, 8, 4, 4)
+        listLayout(inner, nil, 2)
+
+        if opt.Title then
+            local titleLbl = label(inner, (icons[style] or "") .. "  " .. opt.Title, 11, c)
+            titleLbl.ZIndex = 101
+        end
+        if opt.Text then
+            local textLbl = label(inner, opt.Text, 10, T.TextDim)
+            textLbl.TextWrapped = true
+            textLbl.Size        = UDim2.new(1, 0, 0, 0)
+            textLbl.AutomaticSize = Enum.AutomaticSize.Y
+            textLbl.ZIndex      = 101
+        end
+
+        -- Animate in
+        notif.Position = UDim2.new(1, 10, 1, -10)
+        tween(notif, { Position = UDim2.new(1, -250, 1, -notif.AbsoluteSize.Y - 10) }, 0.3, Enum.EasingStyle.Quart)
+
+        local duration = opt.Duration or 4
+        task.delay(duration, function()
+            tween(notif, { Position = UDim2.new(1, 10, 1, -notif.AbsoluteSize.Y - 10) }, 0.25, Enum.EasingStyle.Quart)
+            task.delay(0.3, function() notif:Destroy() end)
+        end)
+    end
+
+    return win
+end
+
+-- ============================================================
+--  RETURN
+-- ============================================================
+return ObfUI
